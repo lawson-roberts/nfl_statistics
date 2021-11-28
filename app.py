@@ -20,7 +20,7 @@ import pickle
 import io
 
 ##Setting Streamlit Settings
-st.set_page_config(layout="wide")
+#st.set_page_config(layout="wide")
 
 ## loading historical games
 #historical = pd.read_csv('data/nfl_historical_clean.csv')
@@ -77,7 +77,8 @@ game_df['time'] = game_df['time'].str.replace("18", "12")
 game_df['time'] = game_df['time'].str.replace("21", "03")
 game_df['time'] = game_df['time'].str.replace("01", "07")
 
-col1, col2, col3 = st.beta_columns(3)
+#col1, col2, col3 = st.beta_columns(3)
+col1, col2 = st.beta_columns(2)
 
 for ind in game_df.index:
 
@@ -134,23 +135,23 @@ for ind in game_df.index:
         #t.write("")
         st.write("-------------------------")
 
-    with col3:
+    #with col3:
         #st.write(stats_all.astype('object'))
 
         #team = {'away': away, 'home': home}
-        if prediction_value == "home":
-            st.image(home_img)
-            st.write("Model Predicts...", home, " as the winner.")
-        else:
-            st.image(away_img)
-            st.write("Model Predicts...", away, " as the winner")
+        #if prediction_value == "home":
+            #st.image(home_img)
+            #st.write("Model Predicts...", home, " as the winner.")
+        #else:
+            #st.image(away_img)
+            #st.write("Model Predicts...", away, " as the winner")
 
         #st.write("Model Probabilities below...", probabilities)
-        st.write("Start Time:", game_df['date'][ind], game_df['time'][ind], " PM CST")
-        st.write("Odds for Spread:", game_df['odds.details'][ind], "---", "Over/Under:", game_df['odds.overUnder'][ind])
+        #st.write("Start Time:", game_df['date'][ind], game_df['time'][ind], " PM CST")
+        #st.write("Odds for Spread:", game_df['odds.details'][ind], "---", "Over/Under:", game_df['odds.overUnder'][ind])
         #st.write("Over/Under:", game_df['odds.overUnder'][ind])
         #st.write("Over/Under:", game_df['odds.overUnder'][ind], "Odds", game_df['odds.overOdds'][ind])
-        st.write("-------------------------")
+        #st.write("-------------------------")
 
 st.write(game_df.astype('object'))
 #st.write(game_dict)
