@@ -1,36 +1,66 @@
 ### importing packages
 import pandas as pd
 import numpy as np
+from math import sqrt
+import pickle
+import requests
 from pandas import json_normalize
 import json
-#from selenium.webdriver.support.expected_conditions import element_selection_state_to_be
-#import matplotlib.pyplot as plt
-import base64
-#import matplotlib.pyplot as plt
-import io
-import os
-from math import floor
 
-## web crawling packages
+#from io import BytesIO
+#from io import StringIO
+#mport boto3
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 import time
 from datetime import date
 from datetime import datetime
 import datetime
-import requests
-from lxml import html
-import csv
+random_state = 5
+
 import urllib.request
 from html_table_parser.parser import HTMLTableParser
 from pprint import pprint
 
-### first we need to collect last weeks game id's
+from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
 
-#### load in last weeks games
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier
+from imblearn.over_sampling import SMOTE
+from sklearn.metrics import classification_report, precision_score, recall_score, f1_score, confusion_matrix
+import shap
 
-### second we need to scrap those game stats
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+### 1.) pull previous weeks game file
+previous_weeks_games = pd.read_csv('predictions/previous_week_games.csv')
+previous_weeks_games = previous_weeks_games.drop(columns = ['Unnamed: 0'])
+
+previous_weeks_games_list = previous_weeks_games['id']
+previous_weeks_games_list
+
+# Opens a website and read its
+# binary contents (HTTP Response Body)
+def url_get_contents(url):
+
+    # Opens a website and read its
+    # binary contents (HTTP Response Body)
+
+    #making request to the website
+    req = urllib.request.Request(url=url)
+    f = urllib.request.urlopen(req)
+
+    #reading contents of the website
+    return f.read()
+
+### 1.a) scrape stats for previous weeks games
+
 game_stats_big_df = pd.DataFrame()
 
-for i in game_id_df['id']:
+for i in previous_weeks_games_list:
     
     try:
         web = "https://www.espn.com/nfl/matchup?gameId=" + str(i)
@@ -68,7 +98,7 @@ for i in game_id_df['id']:
                             'Passing': 'passing_away', 
                             'Comp-Att': 'comp_att_away', 
                             'Yards per pass': 'yards_per_pass_away',
-                            'Fumbles Lost': 'fumbles_lost_away',  
+                            'Fumbles lost': 'fumbles_lost_away',  
                             'Sacks-Yards Lost': 'sack_yards_lost_away', 
                             'Rushing': 'rushing_away', 
                             'Rushing Attempts': 'rushing_att_away', 
@@ -99,7 +129,7 @@ for i in game_id_df['id']:
                             'Passing': 'passing_home', 
                             'Comp-Att': 'comp_att_home', 
                             'Yards per pass': 'yards_per_pass_home',
-                            'Fumbles Lost': 'fumbles_lost_home',  
+                            'Fumbles lost': 'fumbles_lost_home',  
                             'Sacks-Yards Lost': 'sack_yards_lost_home', 
                             'Rushing': 'rushing_home', 
                             'Rushing Attempts': 'rushing_att_home', 
@@ -119,9 +149,11 @@ for i in game_id_df['id']:
     except Exception as e:
         print("Error:", e)
 
+### 1.b) scrape game results for previous weeks games
+
 game_score_big_df = pd.DataFrame()
 
-for i in game_id_df['id']:
+for i in previous_weeks_games_list:
     
     try:
         # defining the html contents of a URL.
@@ -168,6 +200,12 @@ for i in game_id_df['id']:
     except Exception as e:
         print('Error:', e, 'game_id=', i)
 
+## join these three (previous weeks games df, game stats df, and game score df) data sets
+df_ready_to_clean = game_stats_big_df.merge(game_score_big_df, on='id', how='inner')
+df_ready_to_clean = df_ready_to_clean.merge(previous_weeks_games, on='id', how='inner')
+
+
+### 2.) Begin cleaning stats data
 def convert_fraction(column_name, new_column_name, df):
     # new data frame with split value columns
     new = df[column_name].str.split("-", n = 1, expand = True)
@@ -205,35 +243,238 @@ def convert_att_yards(column_name, df):
     df.drop(columns =[column_name], inplace = True)
     return df
 
-def cleaning_last_weeks_stats(df, game_urls):
-    df = convert_fraction("third_down_away", "third_down_away", df)
-    df = convert_fraction("third_down_home", "third_down_home", df)
-    df = convert_fraction("fourth_down_away", "fourth_down_away", df)
-    df = convert_fraction("fourth_down_home", "fourth_down_home", df)
-    df = convert_fraction("comp_att_away", "comp_att_away", df)
-    df = convert_fraction("comp_att_home", "comp_att_home", df)
-    df = df.fillna(0)
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "third_down_away", "third_down_away")
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "third_down_home", "third_down_home")
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "fourth_down_away", "fourth_down_away")
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "fourth_down_home", "fourth_down_home")
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "comp_att_away", "comp_att_away")
+df_ready_to_clean = convert_fraction(df_ready_to_clean, "comp_att_home", "comp_att_home")
+df_ready_to_clean = df_ready_to_clean.fillna(0)
 
-    ## need to clean a few other variables that are being treated as str's
-    df = convert_att_yards("sack_yards_lost_away", df)
-    df = convert_att_yards("sack_yards_lost_home", df)
-    df = convert_att_yards("penalty_away", df)
-    df = convert_att_yards("penalty_home", df)
+## need to clean a few other variables that are being treated as str's
+df_ready_to_clean = convert_att_yards(df_ready_to_clean, "sack_yards_lost_away")
+df_ready_to_clean = convert_att_yards(df_ready_to_clean, "sack_yards_lost_home")
+df_ready_to_clean = convert_att_yards(df_ready_to_clean, "penalty_away")
+df_ready_to_clean = convert_att_yards(df_ready_to_clean, "penalty_home")
 
-    ## change possession into float
-    df['possession_away'] = df['possession_away'].str.replace(':', '.')
-    df['possession_home'] = df['possession_home'].str.replace(':', '.')
-    df['possession_away'] = df['possession_away'].astype(float)
-    df['possession_home'] = df['possession_home'].astype(float)
+## change possession into float
+df_ready_to_clean['possession_away'] = df_ready_to_clean['possession_away'].str.replace(':', '.')
+df_ready_to_clean['possession_home'] = df_ready_to_clean['possession_home'].str.replace(':', '.')
+df_ready_to_clean['possession_away'] = df_ready_to_clean['possession_away'].astype(float)
+df_ready_to_clean['possession_home'] = df_ready_to_clean['possession_home'].astype(float)
 
-    ## needing to declare the winning team to create target variable
-    df['target'] = np.where(df['away_score'] > df['home_score'], 1, 0)
-    df['winning_team'] = np.where(df['away_score'] > df['home_score'], df['away_team'], df['home_team'])
+## needing to declare the winning team to create target variable
+df_ready_to_clean['target'] = np.where(df_ready_to_clean['away_score'] > df_ready_to_clean['home_score'], 1, 0)
+df_ready_to_clean['winning_team'] = np.where(df_ready_to_clean['away_score'] > df_ready_to_clean['home_score'], df_ready_to_clean['away_team'], df_ready_to_clean['home_team'])
 
-    ## merge with game urls file in order to know when games occured
-    df = df.merge(game_urls, on='id', how='inner')
+### 2.a) create and update historical stats file
+## dropping a few last un-needed cloumns
+df_ready_to_clean = df_ready_to_clean.loc[:,~df_ready_to_clean.columns.duplicated()]
+df_clean = df_ready_to_clean.drop(columns=['red_zone_att_away', 'red_zone_att_home'])
+#df_clean.to_csv('data/nfl_historical_clean.csv')
+print(df_clean.groupby('target').size())
 
-### clean stats and append to master historical file
+## pulling in historical file
+df_clean_hist = pd.read_csv('data/nfl_historical_clean.csv')
+df_clean_hist = df_clean_hist.drop(columns = 'Unnamed: 0')
+df_clean_hist = df_clean_hist.append(df_clean, ignore_index=True)
+print(df_clean_hist.shape)
 
-#### this is where we will take these cleaned results and write files back to github
-##### files will include cleaned master file, and file that is ready for model training
+df_clean_hist.to_csv('data/nfl_historical_clean.csv')
+print(df_clean_hist.shape)
+
+### 2.b) creating and updating df_ready_for_model file
+df_ready_for_model = df_ready_to_clean.drop(columns=['red_zone_att_away', 'red_zone_att_home', 'url', 'winning_team', 'away_team', 'away_score', 'home_team', 'home_score', 'id'])
+#df_ready_for_model.to_csv('data/df_ready_for_model.csv')
+
+## appeing new data for historical model ready dataset
+df_ready_for_model_hist = pd.read_csv('data/df_ready_for_model.csv')
+df_ready_for_model_hist = df_ready_for_model_hist.drop(columns = 'Unnamed: 0')
+df_ready_for_model_hist = df_ready_for_model_hist.append(df_ready_for_model, ignore_index=True)
+print(df_ready_for_model_hist.shape)
+df_ready_for_model_hist.to_csv('data/df_ready_for_model.csv')
+
+### 3.) retraining model and update
+df_model = df_ready_for_model_hist
+df_model['target_class']  = np.where(df_model['target'] == 1, "away", "home")
+print(df_model.groupby('target_class').size())
+df_model = df_model.drop(columns = ['target'])
+df_model = df_model.drop_duplicates()
+
+data_bucket = df_model.copy()
+data_bucket = data_bucket.dropna()
+data_len = len(data_bucket.columns)
+
+y_adj_bucket = data_bucket.iloc[:,data_len-1:]
+X_adj_bucket = data_bucket.iloc[:,:data_len-1]
+
+rf_clf =RandomForestClassifier(max_depth = 6,n_estimators=10, max_features = 'log2', random_state=0)
+#rf_clf =RandomForestClassifier(max_depth = 6,n_estimators=10, max_features = 'log2', random_state=0, class_weight={'0-4%': 1, '4-7.6%': 2})
+np.random.seed(42)
+
+##smote
+sm = SMOTE(random_state=42)
+
+## training
+#X_train_res, y_train_res = sm.fit_resample(x_train, y_train)
+
+## productionize
+X_res, y_res = sm.fit_resample(X_adj_bucket, y_adj_bucket)
+
+##random oversample
+#ros = RandomOverSampler(random_state=42)
+#X_train_res, y_train_res = ros.fit_resample(X_train, y_train)
+
+classifier = rf_clf.fit(X_res, y_res)
+#classifier = rf_clf.fit(x_train, y_train)
+#print("Model Score is:", rf_clf.score(x_test, y_test))
+#y_pred_train = rf_clf.predict(X_train_res)
+y_pred = rf_clf.predict(X_res)
+#y_pred_test = rf_clf.predict(x_test)
+
+## saving model
+# save the model to disk
+filename = 'models/random_forest_model_1.sav'
+pickle.dump(classifier, open(filename, 'wb'))
+
+### 4.) prepare teams historical stats file and update
+stats_agg_df = pd.read_csv('data/nfl_historical_clean.csv')
+stats_agg_df = stats_agg_df.drop(columns = 'Unnamed: 0')
+stats_agg_df = stats_agg_df.drop_duplicates()
+
+stats_agg_df['year'] = stats_agg_df['url'].str[-17:-13]
+stats_agg_df['year'] = stats_agg_df['year'].astype(int)
+today = date.today()
+year = today.year
+stats_agg_df = stats_agg_df[(stats_agg_df['year'] == year) | (stats_agg_df['year'] == 2022)]
+
+team_list = stats_agg_df['away_team'].unique()
+len(team_list)
+
+stat_agg_df = pd.DataFrame()
+
+for i in team_list:
+    team = i
+
+    new_DataFrame = stats_agg_df[(stats_agg_df['away_team'] == team) | (stats_agg_df['home_team'] == team)]
+
+    stat_df_away = new_DataFrame[new_DataFrame['away_team'] == team]
+    stat_df_away = stat_df_away[['first_downs_away', 'first_downs_passing_away', 'first_down_rushing_away', 'first_down_by_penalty_away', 'total_plays_away', 'total_yards_away', 'total_drives_away', 'yards_per_play_away', 'passing_away', 'yards_per_pass_away', 'int_thrown_away', 'rushing_away', 'rushing_att_away', 'yards_per_rush_away', 'turnovers_away', 'fumbles_lost_away', 'defensive_td_away', 'possession_away', 'sack_yards_lost_away_occur', 'sack_yards_lost_away_yards', 'penalty_away_occur', 'penalty_away_yards']]
+    stat_df_away = stat_df_away.rename(columns = {'first_downs_away': 'first_downs', 'first_downs_passing_away': 'first_downs_passing', 'first_down_rushing_away': 'first_down_rushing', 'first_down_by_penalty_away': 'first_down_by_penalty', 'total_plays_away': 'total_plays', 'total_yards_away': 'total_yards', 'total_drives_away': 'total_drives', 'yards_per_play_away': 'yards_per_play', 'passing_away': 'passing', 'yards_per_pass_away': 'yards_per_pass', 'int_thrown_away': 'int_thrown', 'rushing_away': 'rushing', 'rushing_att_away': 'rushing_att', 'yards_per_rush_away': 'yards_per_rush', 'turnovers_away': 'turnovers', 'fumbles_lost_away': 'fumbles_lost', 'defensive_td_away': 'defensive_td', 'possession_away': 'possession', 'sack_yards_lost_away_occur': 'sack_yards_lost_occur', 'sack_yards_lost_away_yards': 'sack_yards_lost_yards', 'penalty_away_occur': 'penalty_occur', 'penalty_away_yards': 'penalty_yards'})
+    
+    stat_df_home = new_DataFrame[new_DataFrame['home_team'] == team]
+    stat_df_home = stat_df_home[['first_downs_home', 'first_downs_passing_home', 'first_down_rushing_home', 'first_down_by_penalty_home', 'total_plays_home', 'total_yards_home', 'total_drives_home', 'yards_per_play_home', 'passing_home', 'yards_per_pass_home', 'int_thrown_home', 'rushing_home', 'rushing_att_home', 'yards_per_rush_home', 'turnovers_home', 'fumbles_lost_home', 'defensive_td_home', 'possession_home', 'sack_yards_lost_home_occur', 'sack_yards_lost_home_yards', 'penalty_home_occur', 'penalty_home_yards']]
+    stat_df_home = stat_df_home.rename(columns = {'first_downs_home': 'first_downs', 'first_downs_passing_home': 'first_downs_passing', 'first_down_rushing_home': 'first_down_rushing', 'first_down_by_penalty_home': 'first_down_by_penalty', 'total_plays_home': 'total_plays', 'total_yards_home': 'total_yards', 'total_drives_home': 'total_drives', 'yards_per_play_home': 'yards_per_play', 'passing_home': 'passing', 'yards_per_pass_home': 'yards_per_pass', 'int_thrown_home': 'int_thrown', 'rushing_home': 'rushing', 'rushing_att_home': 'rushing_att', 'yards_per_rush_home': 'yards_per_rush', 'turnovers_home': 'turnovers', 'fumbles_lost_home': 'fumbles_lost', 'defensive_td_home': 'defensive_td', 'possession_home': 'possession', 'sack_yards_lost_home_occur': 'sack_yards_lost_occur', 'sack_yards_lost_home_yards': 'sack_yards_lost_yards', 'penalty_home_occur': 'penalty_occur', 'penalty_home_yards': 'penalty_yards'})
+
+    team_stats_all = stat_df_away.append(stat_df_home)
+    team_stats_agg_temp = pd.DataFrame(team_stats_all.mean()).T
+    team_stats_agg_temp['team'] = team
+    stat_agg_df = stat_agg_df.append(team_stats_agg_temp)
+    print(i, "Done")
+
+print("All Done")
+stat_agg_df.to_csv('data/agg_team_stats.csv')
+
+### 5.) updating all historical files
+game_id_og = pd.read_csv('data/game_id_all.csv')
+game_id_og = game_id_og.drop(columns = ['Unnamed: 0'])
+previous_weeks_games_df = previous_weeks_games
+game_id_all = game_id_og.append(previous_weeks_games_df)
+game_id_all = game_id_all.dropna()
+game_id_all.to_csv('data/game_id_all.csv')
+
+game_scores_og = pd.read_csv('data/game_scores.csv')
+game_scores_og = game_scores_og.drop(columns = ['Unnamed: 0'])
+game_scores_all = game_scores_og.append(game_score_big_df)
+game_scores_all.to_csv('data/game_scores.csv')
+
+game_stats_og = pd.read_csv('data/game_stats_all.csv')
+game_stats_og = game_stats_og.drop(columns = ['Unnamed: 0'])
+game_stats_all = game_stats_og.append(game_stats_big_df)
+game_stats_all.to_csv('data/game_stats_all.csv')
+
+historical = pd.read_csv('data/agg_team_stats.csv')
+probs_historical = pd.read_csv('predictions/model_prediction_file.csv')
+historical = historical.drop(columns='Unnamed: 0')
+probs_historical = probs_historical.drop(columns='Unnamed: 0')
+
+## declaring model name that I would like to use
+filename = 'models/random_forest_model_1.sav'
+# load the model from disk
+model_obj = pickle.load(open(filename, 'rb'))
+
+def get_current_games():
+    url = "https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=football&league=nfl&region=us&lang=en&contentorigin=espn&buyWindow=1m&showAirings=buy%2Clive%2Creplay&showZipLookup=true&tz=America/New_York"
+
+    payload={}
+    headers = {
+    'Accept': 'application/json',
+    'Cookie': 'SWID=3750444F-BA06-4929-C99C-62333D7EE8A0'
+    }
+
+    response = requests.request("GET", url, headers=headers, data=payload)
+
+    response_text = json.loads(response.text)
+
+    game_df = json_normalize(response_text['sports'], ['leagues', 'events'])
+    game_dict = game_df.to_dict('index')
+    return game_df, game_dict
+
+game_df, game_dict = get_current_games()
+game_df[['away','home']] = game_df.shortName.apply(lambda x: pd.Series(str(x).split("@")))
+game_df['away'] = game_df['away'].str.strip()
+game_df['home'] = game_df['home'].str.strip()
+game_df[['date','time']] = game_df.date.apply(lambda x: pd.Series(str(x).split("T")))
+game_df['time'] = game_df['time'].str[:5]
+game_df['time'] = game_df['time'].str.replace("18", "12")
+game_df['time'] = game_df['time'].str.replace("21", "03")
+game_df['time'] = game_df['time'].str.replace("01", "07")
+
+previous_week_games_file_df = game_df[['id', 'season', 'seasonType', 'week']]
+previous_week_games_file_df['season'] = previous_week_games_file_df['season'].astype(str)
+previous_week_games_file_df['week'] = previous_week_games_file_df['week'].astype(str)
+previous_week_games_file_df['url'] = "https://www.espn.com/nfl/scoreboard/_/week/" + previous_week_games_file_df['week'] + "/year/" + previous_week_games_file_df['season'] + "/seasontype/" + previous_week_games_file_df['seasonType']
+previous_week_games_file_df = previous_week_games_file_df.drop(columns = ['season', 'seasonType', 'week'])
+
+previous_week_games_file_df.to_csv('predictions/previous_week_games.csv')
+
+probabilities_df = pd.DataFrame()
+
+for ind in game_df.index:
+
+    game_id = game_df['id'][ind]
+    #id_list.append(game_id)
+
+    away = game_df['away'][ind]
+    home = game_df['home'][ind]
+
+    away_stat = game_df[game_df['away'] == away]
+    away_stat = pd.DataFrame(away_stat['away'])
+    away_stat = away_stat.rename(columns = {'away': 'team'})
+    #away_stat.columns = ['team']
+    away_stat = away_stat.merge(historical, on='team', how='inner')
+    away_stat = away_stat.rename(columns = {'first_downs':'first_downs_away', 'first_downs_passing':'first_downs_passing_away', 'first_down_rushing':'first_down_rushing_away', 'first_down_by_penalty':'first_down_by_penalty_away', 'total_plays':'total_plays_away', 'total_yards':'total_yards_away', 'total_drives':'total_drives_away', 'yards_per_play':'yards_per_play_away', 'passing':'passing_away', 'yards_per_pass':'yards_per_pass_away', 'int_thrown':'int_thrown_away', 'rushing':'rushing_away', 'rushing_att':'rushing_att_away', 'yards_per_rush':'yards_per_rush_away', 'turnovers':'turnovers_away', 'fumbles_lost':'fumbles_lost_away', 'defensive_td':'defensive_td_away', 'possession':'possession_away', 'sack_yards_lost_occur':'sack_yards_lost_away_occur', 'sack_yards_lost_yards':'sack_yards_lost_away_yards', 'penalty_occur':'penalty_away_occur', 'penalty_yards':'penalty_away_yards'})
+    away_stat = away_stat.reset_index()
+    away_stat = away_stat.drop(columns = ['index', 'team'])
+
+    home_stat = game_df[game_df['home'] == home]
+    home_stat = pd.DataFrame(home_stat['home'])
+    home_stat = home_stat.rename(columns = {'home': 'team'})
+    #home_stat.columns = ['team']
+    home_stat = home_stat.merge(historical, on='team', how='inner')
+    home_stat = home_stat.rename(columns = {'first_downs':'first_downs_home', 'first_downs_passing':'first_downs_passing_home', 'first_down_rushing':'first_down_rushing_home', 'first_down_by_penalty':'first_down_by_penalty_home', 'total_plays':'total_plays_home', 'total_yards':'total_yards_home', 'total_drives':'total_drives_home', 'yards_per_play':'yards_per_play_home', 'passing':'passing_home', 'yards_per_pass':'yards_per_pass_home', 'int_thrown':'int_thrown_home', 'rushing':'rushing_home', 'rushing_att':'rushing_att_home', 'yards_per_rush':'yards_per_rush_home', 'turnovers':'turnovers_home', 'fumbles_lost':'fumbles_lost_home', 'defensive_td':'defensive_td_home', 'possession':'possession_home', 'sack_yards_lost_occur':'sack_yards_lost_home_occur', 'sack_yards_lost_yards':'sack_yards_lost_home_yards', 'penalty_occur':'penalty_home_occur', 'penalty_yards':'penalty_home_yards'})
+    home_stat = home_stat.reset_index()
+    home_stat = home_stat.drop(columns = ['index', 'team'])  
+
+    stats_all = pd.concat([away_stat, home_stat], axis=1)
+
+    prediction_temp = model_obj.predict(stats_all)
+    #prediction_value = str(prediction_temp[0])
+    #predictions_list = predictions_list.append([prediction_value])
+    probabilities_temp = pd.DataFrame(model_obj.predict_proba(stats_all), columns=['away', 'home'])
+    probabilities_temp['id'] = game_id
+    #probabilities_temp = probabilities_temp.rename(columns = {'away': away, 'home': home})
+    probabilities_df = probabilities_df.append(probabilities_temp)
+
+probs_historical = probs_historical.append(probabilities_df)
+probs_historical.to_csv('predictions/model_prediction_file.csv')
