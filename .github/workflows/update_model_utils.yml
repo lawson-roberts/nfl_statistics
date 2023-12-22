@@ -3,7 +3,11 @@ name: update_model_utils
 on:
   schedule:
     ## runs every week on sunday
+<<<<<<< HEAD
     - cron: '0 23 * * TUE'
+=======
+    - cron: '0 23 * * FRI'
+>>>>>>> b7f7214492afc54c8d847c57d3c19578a6cba208
 
 jobs:
   build:
