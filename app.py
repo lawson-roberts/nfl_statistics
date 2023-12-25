@@ -202,7 +202,7 @@ for ind in game_df_pred.index:
     with col1:
         st.image(home_img)
         st.write("Home Team:", game_df_pred['home'][ind])
-        st.write("Money Line: ", game_df_pred['odds.details'][ind])
+        st.write("Home Team Spread: ", game_df_pred['odds.details'][ind])
         st.write("Home Team Money Line:", game_df_pred['odds.home.moneyLine'][ind])
         st.write("Home Team Money Line Payout:", round(game_df_pred['home_payout_moneyline'][ind],2))
 
@@ -223,7 +223,7 @@ for ind in game_df_pred.index:
     with col2:
         st.image(away_img)
         st.write("Away Team:", game_df_pred['away'][ind])
-        st.write("Money Line: ", game_df_pred['odds.details'][ind])
+        st.write("Away Team Spread: ", game_df_pred['odds.details'][ind])
         st.write("Away Team Money Line:", game_df_pred['odds.away.moneyLine'][ind])
         st.write("Away Team Money Line Payout", round(game_df_pred['away_payout_moneyline'][ind], 2))
 
