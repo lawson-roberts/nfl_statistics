@@ -138,9 +138,40 @@ column_order = ['first_downs_away', 'first_downs_passing_away', 'first_down_rush
 
 # order columns to match model
 stats_all = stats_all[column_order]
-prediction = model_obj.predict(stats_all)
-probabilities = pd.DataFrame(model_obj.predict_proba(stats_all), columns=['away', 'home'])
-# probabilities = probabilities.rename(columns = {'away': away, 'home': home})
+
+predictions = pd.DataFrame(model_obj.predict(stats_all), columns=['prediction'])
+probabilities = pd.DataFrame(model_obj.predict_proba(stats_all), columns=['away_prob', 'home_prob'])
+
+game_df_reduced = game_df[['name' ,'odds.details', 'odds.home.moneyLine', 'odds.away.moneyLine', 'odds.overUnder', 'odds.overOdds'
+                           , 'odds.underOdds', 'odds.spread', 'odds.awayTeamOdds.spreadOdds', 'odds.homeTeamOdds.spreadOdds'
+                           , 'id', 'date', 'away', 'home', 'time']].copy(deep=True)
+
+# concat predictions and probabilities to game_df
+game_df_pred = pd.concat([game_df_reduced, predictions, probabilities], axis=1)
+
+# st.write(game_df_pred)
+bet_amount = st.number_input('Enter your bet amount:', min_value=5, max_value=100000, value=100, step=1, format=None, key=None)
+st.write("Bet Amount: $", bet_amount)
+
+# calculate money line odds payout based on $100 bet
+game_df_pred['away_payout_moneyline'] = np.where(game_df_pred['odds.away.moneyLine'] < 0, (bet_amount / (abs(game_df_pred['odds.away.moneyLine'])/100)) + bet_amount, bet_amount * (1 + (game_df_pred['odds.away.moneyLine']/100)))
+game_df_pred['away_payout_prob_adjusted'] = game_df_pred['away_payout_moneyline'] * game_df_pred['away_prob']
+
+game_df_pred['home_payout_moneyline'] = np.where(game_df_pred['odds.home.moneyLine'] < 0, (bet_amount / (abs(game_df_pred['odds.home.moneyLine'])/100)) + bet_amount, bet_amount * (1 + (game_df_pred['odds.home.moneyLine']/100)))
+game_df_pred['home_payout_prob_adjusted'] = game_df_pred['home_payout_moneyline'] * game_df_pred['home_prob']
+
+# create column that holds the best payout
+game_df_pred['best_payout'] = np.where(game_df_pred['away_payout_prob_adjusted'] > game_df_pred['home_payout_prob_adjusted'], game_df_pred['away_payout_prob_adjusted'], game_df_pred['home_payout_prob_adjusted'])
+
+# create column that ranks best payout
+game_df_pred['best_payout_rank'] = game_df_pred['best_payout'].rank(ascending=False)
+
+# sort game_df_pred by best payout
+game_df_pred = game_df_pred.sort_values(by=['best_payout'], ascending=False)
+
+#sort game_df_pred back by index
+# game_df_pred = game_df_pred.sort_index()
+# st.write(game_df_pred)
 
 # Create an explainer
 explainer = shap.Explainer(model_obj)
@@ -151,57 +182,38 @@ shap_df = pd.DataFrame(shap_values[0])
 # col1, col2, col3 = st.columns(3)
 col1, col2 = st.columns(2)
 
-for ind in game_df.index:
+for ind in game_df_pred.index:
 
-    away = game_df['away'][ind]
+    away = game_df_pred['away'][ind]
     away_logo_url =  "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/" + str(away) + ".png&scale=crop&cquality=40&location=origin&w=64&h=64"
     away_logo_response = requests.get(away_logo_url)
     away_image_bytes = io.BytesIO(away_logo_response.content)
     away_img = Image.open(away_image_bytes)
 
-    home = game_df['home'][ind]
+    home = game_df_pred['home'][ind]
     home_logo_url =  "https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/" + str(home) + ".png&scale=crop&cquality=40&location=origin&w=64&h=64"
     home_logo_response = requests.get(home_logo_url)
     home_image_bytes = io.BytesIO(home_logo_response.content)
     home_img = Image.open(home_image_bytes)
 
-    away_stat = game_df[game_df['away'] == away]
-    away_stat = pd.DataFrame(away_stat['away'])
-    away_stat = away_stat.rename(columns = {'away': 'team'})
-    #away_stat.columns = ['team']
-    away_stat = away_stat.merge(historical, on='team', how='inner')
-    away_stat = away_stat.rename(columns = {'first_downs':'first_downs_away', 'first_downs_passing':'first_downs_passing_away', 'first_down_rushing':'first_down_rushing_away', 'first_down_by_penalty':'first_down_by_penalty_away', 'total_plays':'total_plays_away', 'total_yards':'total_yards_away', 'total_drives':'total_drives_away', 'yards_per_play':'yards_per_play_away', 'passing':'passing_away', 'yards_per_pass':'yards_per_pass_away', 'int_thrown':'int_thrown_away', 'rushing':'rushing_away', 'rushing_att':'rushing_att_away', 'yards_per_rush':'yards_per_rush_away', 'turnovers':'turnovers_away', 'fumbles_lost':'fumbles_lost_away', 'defensive_td':'defensive_td_away', 'possession':'possession_away', 'sack_yards_lost_occur':'sack_yards_lost_away_occur', 'sack_yards_lost_yards':'sack_yards_lost_away_yards', 'penalty_occur':'penalty_away_occur', 'penalty_yards':'penalty_away_yards'})
-    away_stat = away_stat.reset_index()
-    away_stat = away_stat.drop(columns = ['index', 'team'])
-
-    home_stat = game_df[game_df['home'] == home]
-    home_stat = pd.DataFrame(home_stat['home'])
-    home_stat = home_stat.rename(columns = {'home': 'team'})
-    #home_stat.columns = ['team']
-    home_stat = home_stat.merge(historical, on='team', how='inner')
-    home_stat = home_stat.rename(columns = {'first_downs':'first_downs_home', 'first_downs_passing':'first_downs_passing_home', 'first_down_rushing':'first_down_rushing_home', 'first_down_by_penalty':'first_down_by_penalty_home', 'total_plays':'total_plays_home', 'total_yards':'total_yards_home', 'total_drives':'total_drives_home', 'yards_per_play':'yards_per_play_home', 'passing':'passing_home', 'yards_per_pass':'yards_per_pass_home', 'int_thrown':'int_thrown_home', 'rushing':'rushing_home', 'rushing_att':'rushing_att_home', 'yards_per_rush':'yards_per_rush_home', 'turnovers':'turnovers_home', 'fumbles_lost':'fumbles_lost_home', 'defensive_td':'defensive_td_home', 'possession':'possession_home', 'sack_yards_lost_occur':'sack_yards_lost_home_occur', 'sack_yards_lost_yards':'sack_yards_lost_home_yards', 'penalty_occur':'penalty_home_occur', 'penalty_yards':'penalty_home_yards'})
-    home_stat = home_stat.reset_index()
-    home_stat = home_stat.drop(columns = ['index', 'team'])  
-
-    stats_all = pd.concat([away_stat, home_stat], axis=1)
-
-    column_order = ['first_downs_away', 'first_downs_passing_away', 'first_down_rushing_away', 'first_down_by_penalty_away', 'total_plays_away', 'total_yards_away', 'total_drives_away', 'yards_per_play_away', 'passing_away', 'yards_per_pass_away', 'int_thrown_away', 'rushing_away', 'rushing_att_away', 'yards_per_rush_away', 'turnovers_away', 'fumbles_lost_away', 'defensive_td_away', 'possession_away', 'first_downs_home', 'first_downs_passing_home', 'first_down_rushing_home', 'first_down_by_penalty_home', 'total_plays_home', 'total_yards_home', 'total_drives_home', 'yards_per_play_home', 'passing_home', 'yards_per_pass_home', 'int_thrown_home', 'rushing_home', 'rushing_att_home', 'yards_per_rush_home', 'turnovers_home', 'fumbles_lost_home', 'defensive_td_home', 'possession_home', 'sack_yards_lost_away_occur', 'sack_yards_lost_away_yards', 'sack_yards_lost_home_occur', 'sack_yards_lost_home_yards', 'penalty_away_occur', 'penalty_away_yards', 'penalty_home_occur', 'penalty_home_yards']
-    # order columns to match model
-    stats_all = stats_all[column_order]
-    prediction = model_obj.predict(stats_all)
-    probabilities = pd.DataFrame(model_obj.predict_proba(stats_all), columns=['away', 'home'])
-    probabilities = probabilities.rename(columns = {'away': away, 'home': home})
-    prediction_value = prediction[0]
+    home_prob_payout_var = round(game_df_pred['home_payout_prob_adjusted'][ind],2)
+    away_prob_payout_var = round(game_df_pred['away_payout_prob_adjusted'][ind],2)
 
     with col1:
         st.image(home_img)
-        st.write("Home Team:", game_df['home'][ind])
-        st.write("Home Team Money Line:", game_df['odds.home.moneyLine'][ind])
-        st.write("Model Predicts...", round(probabilities[home][0]*100, 2), "% chance of winning")
+        st.write("Home Team:", game_df_pred['home'][ind])
+        st.write("Money Line: ", game_df_pred['odds.details'][ind])
+        st.write("Home Team Money Line:", game_df_pred['odds.home.moneyLine'][ind])
+        st.write("Home Team Money Line Payout:", round(game_df_pred['home_payout_moneyline'][ind],2))
+
+        if game_df_pred['home_payout_prob_adjusted'][ind] > game_df_pred['away_payout_prob_adjusted'][ind]:
+            st.markdown(":white_check_mark: Best Probability Adjusted Payout: $" + str(home_prob_payout_var),  unsafe_allow_html=True)
+            # st.write("Rank of Profitability: " + str(game_df_pred['best_payout_rank'][ind]))
+        else:
+            st.markdown(" Best Probability Adjusted Payout: $" + str(home_prob_payout_var),  unsafe_allow_html=True)
+        st.write("Model Predicts...", round(game_df_pred['home_prob'][ind]*100, 2), "% chance of winning")
 
         # create Shap waterfall plot for home team using shap_values[0][ind] for shap values
-        # st.write("SHAP Values for Home Team Probability...")
-        # shap.plots._waterfall.waterfall_legacy(explainer.expected_value[0], shap_values[0][ind], stats_all.iloc[ind, :])
         st.pyplot(shap.plots._waterfall.waterfall_legacy(explainer.expected_value[1], shap_values[1][ind], stats_all.iloc[0, :]), )
         st.write("                         ")
         st.write("                         ")
@@ -210,10 +222,19 @@ for ind in game_df.index:
 
     with col2:
         st.image(away_img)
-        st.write("Away Team:", game_df['away'][ind])
-        st.write("Away Team Money Line:", game_df['odds.away.moneyLine'][ind])
-        st.write("Model Predicts...", round(probabilities[away][0]*100, 2), "% chance of winning")
+        st.write("Away Team:", game_df_pred['away'][ind])
+        st.write("Money Line: ", game_df_pred['odds.details'][ind])
+        st.write("Away Team Money Line:", game_df_pred['odds.away.moneyLine'][ind])
+        st.write("Away Team Money Line Payout", round(game_df_pred['away_payout_moneyline'][ind], 2))
 
+        if game_df_pred['home_payout_prob_adjusted'][ind] < game_df_pred['away_payout_prob_adjusted'][ind]:
+            st.markdown(":white_check_mark: Best Probability Adjusted Payout: $" + str(away_prob_payout_var),  unsafe_allow_html=True)
+            # st.write("Rank of Profitability: " + str(game_df_pred['best_payout_rank'][ind]))
+        else:
+            st.markdown(" Best Probability Adjusted Payout: $" + str(away_prob_payout_var),  unsafe_allow_html=True)
+        st.write("Model Predicts...", round(game_df_pred['away_prob'][ind]*100, 2), "% chance of winning")
+
+        # create Shap waterfall plot for home team using shap_values[0][ind] for shap values
         st.pyplot(shap.plots._waterfall.waterfall_legacy(explainer.expected_value[0], shap_values[0][ind], stats_all.iloc[0, :]), )
         st.write("")
         st.write("-------------------------")
@@ -222,7 +243,12 @@ for ind in game_df.index:
     # st.write("SHAP Values for Home Team Probability...")
     # # shap.plots._waterfall.waterfall_legacy(explainer.expected_value[0], shap_values[0][ind], stats_all.iloc[ind, :])
     # st.pyplot(shap.plots._waterfall.waterfall_legacy(explainer.expected_value[0], shap_values[0][ind], stats_all.iloc[0, :]))
-    
+
+    # with col3:
+    #     st.write("Money Line:", game_df_pred['odds.details'][ind])
+    #     st.write("Over/Under:", game_df_pred['odds.overUnder'][ind])
+    #     st.write("Money Line:", game_df_pred['odds.spread'][ind])
+
     # with col3:
     #     st.write("")
     #     # create Shap waterfall plot for home team using shap_values[0][ind] for shap values
@@ -249,5 +275,5 @@ for ind in game_df.index:
         #st.write("Over/Under:", game_df['odds.overUnder'][ind], "Odds", game_df['odds.overOdds'][ind])
         #st.write("-------------------------")
 
-st.write(game_df.astype('object'))
-#st.write(game_dict)
+# st.write(game_df_pred['best_payout'].rank(ascending=False))
+st.write(game_df_pred)
