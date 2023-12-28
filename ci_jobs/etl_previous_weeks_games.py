@@ -16,7 +16,6 @@ import time
 from datetime import date
 from datetime import datetime
 import datetime
-random_state = 5
 
 import urllib.request
 from html_table_parser.parser import HTMLTableParser
