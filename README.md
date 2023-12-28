@@ -9,7 +9,7 @@ I want to do analysis on NFL game statistics to understand if game stats have an
 
 ## Environment
 
-- [Python Environment](https://www.python.org/downloads/release/python-3111/)
+- [Python Environment - 3.11.1](https://www.python.org/downloads/release/python-3111/)
 - [Requirements File](requirements.txt)
 
   - in your python environment simply run `pip install -r requirements.txt` after cloning the repo in your command line
