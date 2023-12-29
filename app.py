@@ -67,16 +67,16 @@ predictions_hist = pd.read_csv('predictions/model_prediction_file.csv')
 game_score_hist = pd.read_csv('data/game_scores.csv')
 # game_score_hist = game_score_hist.drop(columns = 'Unnamed: 0')
 
-# predictions_hist = predictions_hist.merge(game_score_hist, on='id')
-# predictions_hist['tie_check'] = np.where(predictions_hist['away_score'] ==  predictions_hist['home_score'], 'tie', 'no tie')
-# predictions_hist = predictions_hist[predictions_hist['tie_check'] == 'no tie']
-# predictions_hist['winner'] = np.where(predictions_hist['away_score'] >  predictions_hist['home_score'], 'away', 'home')
-# predictions_hist['prediction'] = np.where(predictions_hist['away'] >  predictions_hist['home'], 'away', 'home')
-# predictions_hist['pred_correct'] = np.where(predictions_hist['winner'] == predictions_hist['prediction'], 1, 0)
-# predictions_hist['away'] = round(predictions_hist['away']*100, 2)
-# predictions_hist['home'] = round(predictions_hist['home']*100, 2)
+predictions_hist = predictions_hist.merge(game_score_hist, on='id')
+predictions_hist['tie_check'] = np.where(predictions_hist['away_score'] ==  predictions_hist['home_score'], 'tie', 'no tie')
+predictions_hist = predictions_hist[predictions_hist['tie_check'] == 'no tie']
+predictions_hist['winner'] = np.where(predictions_hist['away_score'] >  predictions_hist['home_score'], 'away', 'home')
+predictions_hist['prediction'] = np.where(predictions_hist['away'] >  predictions_hist['home'], 'away', 'home')
+predictions_hist['pred_correct'] = np.where(predictions_hist['winner'] == predictions_hist['prediction'], 1, 0)
+predictions_hist['away'] = round(predictions_hist['away']*100, 2)
+predictions_hist['home'] = round(predictions_hist['home']*100, 2)
 
-# model_score = round((sum(predictions_hist['pred_correct']) / len(predictions_hist))*100, 2)
+model_score = round((sum(predictions_hist['pred_correct']) / len(predictions_hist))*100, 2)
 
 st.title("NFL Game Predictions")
 st.write("""
@@ -86,10 +86,10 @@ st.write("""### Data Sources:""")
 st.write("""1.) https://www.espn.com/nfl/scoreboard/ used for getting game statistics""")
 st.write("""2.) Caesars Sportsbook used for vegas bets available.""")
 
-# st.write("""### Model Results thus far...""")
-# st.write("Accuracy Score", model_score, "%")
-# st.write("""#### Game Detail for past predictions...""")
-# st.write(predictions_hist.astype('object'))
+st.write("""### Model Results thus far...""")
+st.write("Accuracy Score", model_score, "%")
+st.write("""#### Game Detail for past predictions...""")
+st.write(predictions_hist.astype('object'))
 
 def get_current_games():
     url = "https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=football&league=nfl&region=us&lang=en&contentorigin=espn&buyWindow=1m&showAirings=buy%2Clive%2Creplay&showZipLookup=true&tz=America/New_York"
