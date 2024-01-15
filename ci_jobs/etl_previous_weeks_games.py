@@ -289,7 +289,7 @@ print("Before:", df_clean_hist.shape)
 # df_clean_hist = df_clean_hist.drop(columns = 'Unnamed: 0')
 # df_clean_hist = df_clean_hist.append(df_clean, ignore_index=True)
 df_clean_hist = pd.concat([df_clean_hist, df_clean], axis=0).reset_index(drop=True)
-# df_clean_hist = df_clean_hist.drop_duplicates(keep='last').reset_index(drop=True)
+df_clean_hist = df_clean_hist.drop_duplicates(keep='last').reset_index(drop=True)
 print("After:", df_clean_hist.shape)
 
 df_clean_hist.to_csv('data/nfl_historical_clean.csv', index=False)
@@ -313,7 +313,7 @@ df_model = df_ready_for_model_hist
 df_model['target_class']  = np.where(df_model['target'] == 1, "away", "home")
 print(df_model.groupby('target_class').size())
 df_model = df_model.drop(columns = ['target'])
-# df_model = df_model.drop_duplicates()
+df_model = df_model.drop_duplicates()
 
 data_bucket = df_model.copy()
 data_bucket = data_bucket.dropna()
@@ -375,7 +375,7 @@ stats_agg_df = stats_agg_df[(stats_agg_df['year'] == year) | (stats_agg_df['year
 print("4. Prepare teams historical stats file")
 stats_agg_df = pd.read_csv('data/nfl_historical_clean.csv')
 # stats_agg_df = stats_agg_df.drop(columns = 'Unnamed: 0')
-# stats_agg_df = stats_agg_df.drop_duplicates()
+stats_agg_df = stats_agg_df.drop_duplicates()
 
 stats_agg_df['year'] = stats_agg_df['url'].str[-17:-13]
 stats_agg_df['year'] = stats_agg_df['year'].astype(int)
@@ -410,7 +410,7 @@ for i in team_list:
 
 print("All Done")
 
-# stat_agg_df = stat_agg_df.drop_duplicates()
+stat_agg_df = stat_agg_df.drop_duplicates()
 stat_agg_df.to_csv('data/agg_team_stats.csv', index=False)
 
 print("5. Update game historical files")
@@ -419,14 +419,14 @@ game_id_og = pd.read_csv('data/game_id_all.csv')
 previous_weeks_games_df = previous_weeks_games
 # game_id_all = game_id_og.append(previous_weeks_games_df)
 game_id_all = pd.concat([game_id_og, previous_weeks_games_df], axis=0).reset_index(drop=True)
-# game_id_all = game_id_all.drop_duplicates()
+game_id_all = game_id_all.drop_duplicates()
 game_id_all = game_id_all.dropna()
 
 game_scores_og = pd.read_csv('data/game_scores.csv')
 # game_scores_og = game_scores_og.drop(columns = ['Unnamed: 0'])
 # game_scores_all = game_scores_og.append(game_score_big_df)
 game_scores_all = pd.concat([game_scores_og, game_score_big_df], axis=0).reset_index(drop=True)
-# game_scores_all = game_scores_all.drop_duplicates()
+game_scores_all = game_scores_all.drop_duplicates()
 game_scores_all.to_csv('data/game_scores.csv', index=False)
 print("Done!")
 
@@ -520,5 +520,6 @@ for ind in game_df.index:
     probabilities_df = pd.concat([probabilities_df, probabilities_temp], axis=0).reset_index(drop=True)
 
 probs_historical = pd.concat([probs_historical, probabilities_df], axis=0).reset_index(drop=True)
+probs_historical = probs_historical.drop_duplicates()
 probs_historical.to_csv('predictions/model_prediction_file.csv', index=False)
 print("Done with everything. Ready to commit.")
